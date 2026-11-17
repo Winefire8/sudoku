@@ -13,3 +13,7 @@ build/
 
 # APK build output (committed in parts by CI)
 apk-parts/
+
+# Local build output
+dist/
+artifacts/
