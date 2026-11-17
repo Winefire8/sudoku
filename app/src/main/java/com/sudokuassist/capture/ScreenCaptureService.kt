@@ -58,21 +58,21 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     private var lastAnalysisAt = 0L
 
     /**
-     * Consecutive automatic scans that found nothing new. While this is > 0 the service
-     * only re-reads the screen when the 12x24 signature actually changes, which is what
-     * stops the "endless scanning" the user sees on screens that contain no board.
+     * Last message published as an [AppEvents.Update.Idle] for the current screen.
+     *
+     * The tick keeps polling the screen signature; while the picture is unchanged the
+     * service publishes nothing at all. The message is remembered only so that re-entering
+     * the same "no board here" state does not repaint an identical banner.
      */
-    private var quietScans = 0
-    /** True while the last result still stands and nothing has changed on screen. */
-    private var settled = false
+    private var lastIdleMessage: String? = null
 
     private val autoTick = object : Runnable {
         override fun run() {
-            // While [settled] the screen has not changed since the last result, and the
-            // signature check inside onFrame() is the only thing that can unset it. Doing
-            // the check there (instead of a full capture here) costs one 12x24 bitmap per
-            // tick instead of a full resolution frame plus recognition.
-            if (autoRefresh && captureManager.isActive && !analyzing && !settled &&
+            // The tick always keeps running: it is the only thing that notices the user
+            // opening a different app. What it must not do is repeat the full pipeline on a
+            // screen that has already been reported — that is what looked like an endless
+            // scan. onFrame() decides, from the cheap signature, whether there is work.
+            if (autoRefresh && captureManager.isActive && !analyzing &&
                 System.currentTimeMillis() - lastAnalysisAt >= AUTO_REFRESH_MS
             ) {
                 mainHandler.post { captureFrame() }
@@ -222,17 +222,15 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         val sig = signature(bitmap)
         if (!manual) {
             if (sig == lastFrameSignature) {
-                // Nothing changed on screen: keep whatever is already shown and stop
-                // re-reading until the picture changes. This is the steady state while the
-                // user looks at a solved board — or at an app that has no board at all.
+                // Same picture as last time. If the overlay already describes this screen
+                // (solved, or "no board here") there is nothing to do and — crucially —
+                // nothing to publish: re-publishing would only repaint the same banner.
                 bitmap.recycle()
-                settled = true
                 finishAnalysis()
                 return
             }
             lastFrameSignature = sig
         }
-        settled = false
         lastAnalysisAt = System.currentTimeMillis()
         val handler = workHandler
         if (handler == null) {
@@ -263,11 +261,7 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     }
 
     private fun process(bitmap: Bitmap) {
-        // Announce the scan only when something is actually going to be shown: a failure
-        // that repeats every few seconds must not re-paint the overlay each time.
-        if (quietScans == 0) {
-            AppEvents.publish(AppEvents.Update.Working(getString(R.string.status_reading)))
-        }
+        AppEvents.publish(AppEvents.Update.Working(getString(R.string.status_reading)))
         // Cheap pre-check before the expensive pipeline: most screens (browser, chat,
         // launcher) have no board at all, and running the full detector on them every
         // couple of seconds is what made the assistant look like it scanned forever.
@@ -321,7 +315,7 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         when (val result = SudokuSolver.solve(grid.cells)) {
             is SolveResult.Solved -> {
                 if (SudokuSolver.hasAnswers(grid.cells, result.solution)) {
-                    quietScans = 0
+                    lastIdleMessage = null
                     AppEvents.publish(AppEvents.Update.GridFound(grid, result.solution, grid.quality))
                     grid.recycleScreenshot()
                     CaptureLauncher.markSolved()
@@ -353,7 +347,6 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     }
 
     private fun publishFailure(reason: AppEvents.Reason, message: String, grid: RecognizedGrid?) {
-        quietScans++
         AppEvents.publish(AppEvents.Update.Failure(reason, message, grid))
     }
 
@@ -364,8 +357,10 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
      * both pointless and unreadable, so subsequent identical idles are dropped.
      */
     private fun reportIdle(message: String) {
-        quietScans++
-        if (quietScans == 1) {
+        // This always terminates the "Working" state, so the banner can never be left
+        // hanging — that was the bug the user saw: a permanent "Reading the screen…".
+        if (message != lastIdleMessage) {
+            lastIdleMessage = message
             AppEvents.publish(AppEvents.Update.Idle(message))
         }
     }
