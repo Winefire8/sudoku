@@ -41,6 +41,7 @@
     <string name="status_reading">Reading the screen…</string>
     <string name="error_nothing_recognized">The grid was found, but no digits could be read. Use “Edit” and type them in.</string>
     <string name="error_already_solved">The board is already complete — nothing to solve</string>
+    <string name="status_no_grid_here">No Sudoku board here — open your Sudoku app</string>
     <string name="status_running">Assistant is running — switch to your Sudoku app</string>
 
     <string name="overlay_capture">Read grid</string>

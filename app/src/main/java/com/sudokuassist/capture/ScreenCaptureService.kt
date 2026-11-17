@@ -53,8 +53,28 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     private var lastFrameSignature: String? = null
     private var lastAnalysisAt = 0L
 
+    /**
+     * Last message published as an [AppEvents.Update.Idle] for the current screen.
+     *
+     * The tick keeps polling the screen signature; while the picture is unchanged the
+     * service publishes nothing at all. The message is remembered only so that re-entering
+     * the same "no board here" state does not repaint an identical banner.
+     */
+    private var lastIdleMessage: String? = null
+
+    /**
+     * True when a "Reading the screen…" banner has been published and no terminal update
+     * has replaced it yet. Used as a hard guarantee that the banner always goes away:
+     * an [AppEvents.Update.Idle] is published even if it repeats the previous message.
+     */
+    private var busyAnnounced = false
+
     private val autoTick = object : Runnable {
         override fun run() {
+            // The tick always keeps running: it is the only thing that notices the user
+            // opening a different app. What it must not do is repeat the full pipeline on a
+            // screen that has already been reported — that is what looked like an endless
+            // scan. onFrame() decides, from the cheap signature, whether there is work.
             if (autoRefresh && captureManager.isActive && !analyzing &&
                 System.currentTimeMillis() - lastAnalysisAt >= AUTO_REFRESH_MS
             ) {
@@ -196,17 +216,18 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
             return
         }
         analyzing = true
-        AppEvents.publish(AppEvents.Update.Working(getString(R.string.status_reading)))
         captureManager.capture(this)
     }
 
     override fun onFrame(bitmap: Bitmap) {
         val manual = userRequestedCapture
         userRequestedCapture = false
+        val sig = signature(bitmap)
         if (!manual) {
-            val sig = signature(bitmap)
             if (sig == lastFrameSignature) {
-                // Nothing changed on screen: keep the answers that are already shown.
+                // Same picture as last time. If the overlay already describes this screen
+                // (solved, or "no board here") there is nothing to do and — crucially —
+                // nothing to publish: re-publishing would only repaint the same banner.
                 bitmap.recycle()
                 finishAnalysis()
                 return
@@ -243,23 +264,31 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     }
 
     private fun process(bitmap: Bitmap) {
-        // The ML Kit toggle can change between runs: rebuild the recogniser when it does.
-        val useMlKit = prefs.useMlKit
-        if (recognizerUseMlKit != useMlKit) {
-            recognizer?.close()
-            recognizer = null
-            recognizerUseMlKit = useMlKit
-        }
-        val rec = recognizer ?: SudokuRecognizer(useMlKit = useMlKit).also { recognizer = it }
+        // Announce only now: this is the part that can take a moment. [onFrame] has already
+        // discarded unchanged screens, and every path below publishes a terminal update, so
+        // the banner lives exactly as long as this call does.
+        AppEvents.publish(AppEvents.Update.Working(getString(R.string.status_reading)))
+        busyAnnounced = true
+
         val output = try {
+            // The ML Kit toggle can change between runs: rebuild the recogniser when it does.
+            val useMlKit = prefs.useMlKit
+            if (recognizerUseMlKit != useMlKit) {
+                recognizer?.close()
+                recognizer = null
+                recognizerUseMlKit = useMlKit
+            }
+            val rec = recognizer ?: SudokuRecognizer(useMlKit = useMlKit).also { recognizer = it }
             rec.recognize(bitmap)
         } catch (t: Throwable) {
             Log.e(TAG, "recognizer failed", t)
             null
         }
         if (output == null) {
+            // Not an error: most screenfuls simply have no board on them. A toast for every
+            // browser tab would be noise, so this is reported as a quiet idle state.
             bitmap.recycle()
-            publishFailure(AppEvents.Reason.NO_GRID, getString(R.string.error_no_grid), null)
+            reportIdle(getString(R.string.status_no_grid_here))
             return
         }
         val grid: RecognizedGrid = output.grid
@@ -275,6 +304,8 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         when (val result = SudokuSolver.solve(grid.cells)) {
             is SolveResult.Solved -> {
                 if (SudokuSolver.hasAnswers(grid.cells, result.solution)) {
+                    lastIdleMessage = null
+                    busyAnnounced = false
                     AppEvents.publish(AppEvents.Update.GridFound(grid, result.solution, grid.quality))
                     grid.recycleScreenshot()
                     CaptureLauncher.markSolved()
@@ -306,7 +337,28 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     }
 
     private fun publishFailure(reason: AppEvents.Reason, message: String, grid: RecognizedGrid?) {
+        // A failure is a terminal update too, so it retires the busy banner.
+        busyAnnounced = false
         AppEvents.publish(AppEvents.Update.Failure(reason, message, grid))
+    }
+
+    /**
+     * Publishes an informational "nothing to do" state that does **not** count as an error.
+     *
+     * Only the first occurrence is shown: repeating the same banner every two seconds is
+     * both pointless and unreadable, so subsequent identical idles are dropped.
+     */
+    private fun reportIdle(message: String) {
+        // This always terminates the "Working" state, so the banner can never be left
+        // hanging — that was the bug the user saw: a permanent "Reading the screen…".
+        // Publish when the message is new *or* when a banner is still waiting to be cleared:
+        // suppressing a repeated idle while "Reading the screen…" is on screen would leave
+        // that banner up forever, which is exactly the bug being fixed.
+        if (message != lastIdleMessage || busyAnnounced) {
+            lastIdleMessage = message
+            busyAnnounced = false
+            AppEvents.publish(AppEvents.Update.Idle(message))
+        }
     }
 
     private fun publishError(message: String) {

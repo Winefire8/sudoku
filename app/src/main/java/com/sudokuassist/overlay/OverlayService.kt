@@ -57,6 +57,8 @@ class OverlayService : Service(), AppEvents.Listener {
     private var currentSolution: IntArray? = null
     private var lastMessage: String? = null
     private var lastMessageIsError = false
+    /** Last failure text that was toasted, so a repeating failure stays silent. */
+    private var lastFailureMessage: String? = null
     private var panelVisible = false
 
     // button drag state
@@ -406,7 +408,16 @@ class OverlayService : Service(), AppEvents.Listener {
         main.post {
             when (update) {
                 is AppEvents.Update.Working -> updateDigitLayer(update.message, false)
+                is AppEvents.Update.Idle -> {
+                    // Nothing to do on this screen. Shown quietly — no toast, no editor.
+                    // Answers already on screen are *kept*: they belong to the board the
+                    // user is looking at, and the overlay is redrawn from a fresh grid as
+                    // soon as one is recognised.
+                    if (currentGrid == null) updateDigitLayer(update.message, false)
+                    else updateDigitLayer(null, false)
+                }
                 is AppEvents.Update.GridFound -> {
+                    lastFailureMessage = null
                     replaceGrid(update.grid)
                     currentSolution = update.solutions
                     updateDigitLayer(null, false)
@@ -422,7 +433,13 @@ class OverlayService : Service(), AppEvents.Listener {
                     }
                     currentSolution = null
                     updateDigitLayer(update.message, true)
-                    toast(update.message)
+                    // A toast is for a *new* problem. Auto-refresh re-reports the same
+                    // failure every few seconds, and repeating the toast for it turns the
+                    // screen into a flickering mess.
+                    if (update.message != lastFailureMessage) {
+                        lastFailureMessage = update.message
+                        toast(update.message)
+                    }
                 }
             }
         }

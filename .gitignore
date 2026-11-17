@@ -17,3 +17,6 @@ apk-parts/
 # Local build output
 dist/
 artifacts/
+
+# screenshots used only to validate the vision heuristics
+image-search/
