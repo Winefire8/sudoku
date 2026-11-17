@@ -46,6 +46,12 @@ object SudokuGridDetector {
      */
     private const val MIN_CELL_CONTRAST = 35.0
 
+    /**
+     * Minimum number of evenly usable line peaks per axis before [detect] is attempted.
+     * A real board has 10 per axis; the probe accepts 6 so partial/hidden boards still pass.
+     */
+    private const val MIN_LATTICE_LINES = 6
+
     data class Result(
         val geometry: GridGeometry,
         val quality: Float,
@@ -266,6 +272,55 @@ object SudokuGridDetector {
         if (x0 < -4 || y0 < -4 || x1 > w + 4 || y1 > h + 4) return null
         val score = 0.5f * (lc.score + lr.score)
         return score to GridGeometry(floatArrayOf(x0, y0, x1, y0, x1, y1, x0, y1))
+    }
+
+    /**
+     * Cheap "is a board even plausible here?" probe, used to avoid running the full
+     * detector on a screen that obviously has no grid (a browser, a chat, the launcher).
+     *
+     * It only looks at the line profile of the ink mask: a Sudoku board has long
+     * horizontal *and* vertical strokes, whereas ordinary UI text has almost none. Cost is
+     * one mask + one morphology pass on a downscaled copy, i.e. a fraction of [detect].
+     *
+     * Deliberately permissive — a false positive only means detect() runs as usual.
+     */
+    fun hasGridLikeStructure(gray: org.opencv.core.Mat): Boolean {
+        val h = gray.rows()
+        val w = gray.cols()
+        if (h < 120 || w < 120) return false
+        val scale = min(1.0, 700.0 / max(h, w))
+        val work = org.opencv.core.Mat()
+        if (scale < 1.0) {
+            org.opencv.imgproc.Imgproc.resize(
+                gray, work, org.opencv.core.Size(w * scale, h * scale), 0.0, 0.0,
+                org.opencv.imgproc.Imgproc.INTER_AREA
+            )
+        } else {
+            gray.copyTo(work)
+        }
+        val mask = structMask(work)
+        val wh = work.rows()
+        val ww = work.cols()
+        work.release()
+        val kVert = max(7, wh / 8)
+        val kHorz = max(7, ww / 8)
+        val prof = lineProfiles(mask, kVert, kHorz)
+        mask.release()
+        return hasLattice(prof.cols) && hasLattice(prof.rows)
+    }
+
+    /**
+     * @return true when the profile contains at least [MIN_LATTICE_LINES] evenly usable
+     * line peaks. A grid yields ten strong peaks; scattered text yields a few weak ones.
+     */
+    private fun hasLattice(profile: FloatArray): Boolean {
+        if (profile.isEmpty()) return false
+        var mx = 0f
+        for (v in profile) if (v > mx) mx = v
+        if (mx < 0.20f) return false
+        val norm = FloatArray(profile.size) { profile[it] / mx }
+        val peaks = localMaxima(norm, 0.35f, max(2, profile.size / 150))
+        return peaks.size >= MIN_LATTICE_LINES
     }
 
     // ------------------------------------------------------------------ stage B

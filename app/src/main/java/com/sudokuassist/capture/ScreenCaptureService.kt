@@ -22,7 +22,11 @@ import com.sudokuassist.util.AppEvents
 import com.sudokuassist.util.Notifications
 import com.sudokuassist.util.Prefs
 import com.sudokuassist.vision.RecognizedGrid
+import com.sudokuassist.vision.SudokuGridDetector
 import com.sudokuassist.vision.SudokuRecognizer
+import org.opencv.android.Utils
+import org.opencv.core.Mat
+import org.opencv.imgproc.Imgproc
 
 /**
  * Foreground service that owns the MediaProjection session.
@@ -53,9 +57,22 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     private var lastFrameSignature: String? = null
     private var lastAnalysisAt = 0L
 
+    /**
+     * Consecutive automatic scans that found nothing new. While this is > 0 the service
+     * only re-reads the screen when the 12x24 signature actually changes, which is what
+     * stops the "endless scanning" the user sees on screens that contain no board.
+     */
+    private var quietScans = 0
+    /** True while the last result still stands and nothing has changed on screen. */
+    private var settled = false
+
     private val autoTick = object : Runnable {
         override fun run() {
-            if (autoRefresh && captureManager.isActive && !analyzing &&
+            // While [settled] the screen has not changed since the last result, and the
+            // signature check inside onFrame() is the only thing that can unset it. Doing
+            // the check there (instead of a full capture here) costs one 12x24 bitmap per
+            // tick instead of a full resolution frame plus recognition.
+            if (autoRefresh && captureManager.isActive && !analyzing && !settled &&
                 System.currentTimeMillis() - lastAnalysisAt >= AUTO_REFRESH_MS
             ) {
                 mainHandler.post { captureFrame() }
@@ -196,23 +213,26 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
             return
         }
         analyzing = true
-        AppEvents.publish(AppEvents.Update.Working(getString(R.string.status_reading)))
         captureManager.capture(this)
     }
 
     override fun onFrame(bitmap: Bitmap) {
         val manual = userRequestedCapture
         userRequestedCapture = false
+        val sig = signature(bitmap)
         if (!manual) {
-            val sig = signature(bitmap)
             if (sig == lastFrameSignature) {
-                // Nothing changed on screen: keep the answers that are already shown.
+                // Nothing changed on screen: keep whatever is already shown and stop
+                // re-reading until the picture changes. This is the steady state while the
+                // user looks at a solved board — or at an app that has no board at all.
                 bitmap.recycle()
+                settled = true
                 finishAnalysis()
                 return
             }
             lastFrameSignature = sig
         }
+        settled = false
         lastAnalysisAt = System.currentTimeMillis()
         val handler = workHandler
         if (handler == null) {
@@ -243,19 +263,45 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     }
 
     private fun process(bitmap: Bitmap) {
-        // The ML Kit toggle can change between runs: rebuild the recogniser when it does.
-        val useMlKit = prefs.useMlKit
-        if (recognizerUseMlKit != useMlKit) {
-            recognizer?.close()
-            recognizer = null
-            recognizerUseMlKit = useMlKit
+        // Announce the scan only when something is actually going to be shown: a failure
+        // that repeats every few seconds must not re-paint the overlay each time.
+        if (quietScans == 0) {
+            AppEvents.publish(AppEvents.Update.Working(getString(R.string.status_reading)))
         }
-        val rec = recognizer ?: SudokuRecognizer(useMlKit = useMlKit).also { recognizer = it }
-        val output = try {
-            rec.recognize(bitmap)
-        } catch (t: Throwable) {
-            Log.e(TAG, "recognizer failed", t)
-            null
+        // Cheap pre-check before the expensive pipeline: most screens (browser, chat,
+        // launcher) have no board at all, and running the full detector on them every
+        // couple of seconds is what made the assistant look like it scanned forever.
+        val looksLikeGrid = runCatching {
+            val rgba = Mat()
+            Utils.bitmapToMat(bitmap, rgba)
+            val gray = Mat()
+            Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
+            rgba.release()
+            val ok = SudokuGridDetector.hasGridLikeStructure(gray)
+            gray.release()
+            ok
+        }.getOrDefault(true)   // on any doubt, fall through to the real detector
+
+        val output = if (!looksLikeGrid) null else {
+            // The ML Kit toggle can change between runs: rebuild the recogniser when it does.
+            val useMlKit = prefs.useMlKit
+            if (recognizerUseMlKit != useMlKit) {
+                recognizer?.close()
+                recognizer = null
+                recognizerUseMlKit = useMlKit
+            }
+            val rec = recognizer ?: SudokuRecognizer(useMlKit = useMlKit).also { recognizer = it }
+            try {
+                rec.recognize(bitmap)
+            } catch (t: Throwable) {
+                Log.e(TAG, "recognizer failed", t)
+                null
+            }
+        }
+        if (!looksLikeGrid) {
+            bitmap.recycle()
+            reportIdle(getString(R.string.status_no_grid_here))
+            return
         }
         if (output == null) {
             bitmap.recycle()
@@ -275,6 +321,7 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         when (val result = SudokuSolver.solve(grid.cells)) {
             is SolveResult.Solved -> {
                 if (SudokuSolver.hasAnswers(grid.cells, result.solution)) {
+                    quietScans = 0
                     AppEvents.publish(AppEvents.Update.GridFound(grid, result.solution, grid.quality))
                     grid.recycleScreenshot()
                     CaptureLauncher.markSolved()
@@ -306,7 +353,21 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
     }
 
     private fun publishFailure(reason: AppEvents.Reason, message: String, grid: RecognizedGrid?) {
+        quietScans++
         AppEvents.publish(AppEvents.Update.Failure(reason, message, grid))
+    }
+
+    /**
+     * Publishes an informational "nothing to do" state that does **not** count as an error.
+     *
+     * Only the first occurrence is shown: repeating the same banner every two seconds is
+     * both pointless and unreadable, so subsequent identical idles are dropped.
+     */
+    private fun reportIdle(message: String) {
+        quietScans++
+        if (quietScans == 1) {
+            AppEvents.publish(AppEvents.Update.Idle(message))
+        }
     }
 
     private fun publishError(message: String) {

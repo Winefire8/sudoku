@@ -406,6 +406,13 @@ class OverlayService : Service(), AppEvents.Listener {
         main.post {
             when (update) {
                 is AppEvents.Update.Working -> updateDigitLayer(update.message, false)
+                is AppEvents.Update.Idle -> {
+                    // No board on screen: clear stale answers, but keep it quiet — no toast,
+                    // no editor popup, no error colour.
+                    currentSolution = null
+                    currentGrid = null
+                    updateDigitLayer(update.message, false)
+                }
                 is AppEvents.Update.GridFound -> {
                     replaceGrid(update.grid)
                     currentSolution = update.solutions

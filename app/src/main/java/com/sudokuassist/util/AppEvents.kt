@@ -13,6 +13,12 @@ object AppEvents {
     /** State published by the capture service after each analysis run. */
     sealed class Update {
         data class Working(val message: String) : Update()
+
+        /**
+         * Nothing to do (no board on screen, or the same picture as before). Purely
+         * informational: it must not raise an error banner or open the editor.
+         */
+        data class Idle(val message: String) : Update()
         data class GridFound(val grid: RecognizedGrid, val solutions: IntArray, val quality: Float) : Update()
         data class Failure(val reason: Reason, val message: String, val grid: RecognizedGrid? = null) : Update()
     }
