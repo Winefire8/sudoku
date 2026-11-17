@@ -45,7 +45,17 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest --stacktrace
+        run: |
+          set +e
+          ./gradlew --no-daemon testDebugUnitTest > /tmp/g.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            tr -d '\r' < /tmp/g.log > /tmp/g2.log
+            # annotations are the only log channel reachable from the sandbox
+            grep -nE "^e: |FAILED|AssertionError|expected:|What went wrong" /tmp/g2.log \
+              | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            exit $code
+          fi
 
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug --stacktrace
