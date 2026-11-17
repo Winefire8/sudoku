@@ -45,10 +45,11 @@ jobs:
           ./gradlew --no-daemon testDebugUnitTest > /tmp/gradle.log 2>&1
           code=$?
           if [ $code -ne 0 ]; then
-            echo "=== errors ==="
-            grep -nE "^e: |error:|FAILURE|What went wrong|Caused by|Execution failed" /tmp/gradle.log | tail -40
-            echo "=== compileErrors ==="
-            grep -E "^e: file" /tmp/gradle.log | head -40
+            tr -d '\r' < /tmp/gradle.log > /tmp/g.log
+            echo "::error::=== marker: errors ==="
+            grep -nE "^e: |error:|What went wrong|Execution failed|Caused by" /tmp/g.log | head -30 | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::=== marker: context ==="
+            grep -n -A6 "What went wrong" /tmp/g.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
             exit $code
           fi
 
