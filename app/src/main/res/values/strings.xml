@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sudoku Assist</string>
+
+    <string name="subtitle">Floating helper that reads a Sudoku grid from the screen and shows the answers on top of it. Works fully offline.</string>
+
+    <string name="step_permissions">1 · Permissions</string>
+    <string name="overlay_permission">Draw over other apps</string>
+    <string name="overlay_permission_desc">Required for the floating button and the answer layer.</string>
+    <string name="grant">Grant</string>
+    <string name="granted">Granted</string>
+    <string name="notifications_permission">Notifications</string>
+    <string name="notifications_permission_desc">Needed by the foreground services on Android 13+.</string>
+    <string name="battery_optimization">Ignore battery optimisation</string>
+    <string name="battery_optimization_desc">Keeps the capture service alive in the background.</string>
+
+    <string name="step_capture">2 · Screen capture</string>
+    <string name="capture_permission">Screen capture (MediaProjection)</string>
+    <string name="capture_permission_desc">The screen is analysed locally, frames are never stored or sent anywhere.</string>
+    <string name="capture_granted">Capture allowed</string>
+    <string name="capture_not_granted">Not granted yet</string>
+
+    <string name="step_overlay">3 · Launch</string>
+    <string name="start_overlay">Show floating assistant</string>
+    <string name="stop_overlay">Hide floating assistant</string>
+
+    <string name="step_settings">Overlay settings</string>
+    <string name="auto_mode">Auto refresh on screen change</string>
+    <string name="auto_mode_desc">Re-reads the grid a few seconds after the screen content changes.</string>
+    <string name="show_givens">Show recognised givens</string>
+    <string name="use_ml_kit">Use ML Kit to verify digits</string>
+    <string name="use_ml_kit_desc">Slower but more robust on unusual fonts.</string>
+    <string name="overlay_scale">Answer size</string>
+
+    <string name="step_test">Test without another app</string>
+    <string name="title_test">Sudoku Assist — diagnostics</string>
+    <string name="test_image">Test on a sample screenshot</string>
+    <string name="test_image_desc">Opens the viewer, then run the assistant on it.</string>
+
+    <string name="status_idle">Assistant is not running</string>
+    <string name="status_reading">Reading the screen…</string>
+    <string name="error_nothing_recognized">The grid was found, but no digits could be read. Use “Edit” and type them in.</string>
+    <string name="error_already_solved">The board is already complete — nothing to solve</string>
+    <string name="status_running">Assistant is running — switch to your Sudoku app</string>
+
+    <string name="overlay_capture">Read grid</string>
+    <string name="overlay_edit">Edit</string>
+    <string name="overlay_solve">Solve</string>
+    <string name="overlay_close">Close</string>
+
+    <string name="notif_channel_overlay">Floating assistant</string>
+    <string name="notif_channel_capture">Screen analysis</string>
+    <string name="notif_overlay_title">Sudoku Assist</string>
+    <string name="notif_overlay_text">Floating button is active</string>
+    <string name="notif_capture_title">Analysing the screen</string>
+    <string name="notif_capture_text">Local recognition is active</string>
+    <string name="notif_stop">Stop</string>
+
+    <string name="error_overlay_permission">Grant the “draw over other apps” permission first</string>
+    <string name="error_no_capture">Screen capture is not allowed — open capture settings</string>
+    <string name="error_start_capture">Could not start screen capture</string>
+    <string name="error_sample_missing">Sample screenshot not found: %1$s</string>
+    <string name="error_no_grid">No Sudoku grid found on the screen</string>
+    <string name="error_unsolvable">The recognised digits contradict each other</string>
+    <string name="error_no_solution">The puzzle has no solution</string>
+
+    <string name="editor_title">Edit digits — tap a cell, then a number</string>
+    <string name="editor_apply">Apply</string>
+    <string name="editor_cancel">Cancel</string>
+    <string name="editor_clear">Clear</string>
+
+
+    <string name="hint_usage">After starting: open any Sudoku app, tap the orange button, then “Read grid”. Answers appear on top of the cells. Use “Edit” if a digit was misread.</string>
+</resources>
