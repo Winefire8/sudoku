@@ -135,10 +135,11 @@ class ScanLoopTest {
     @Test
     fun repeatedIdleStillClearsAnOutstandingBanner() {
         val loop = Loop()
-        assertEquals(Loop.Outcome.Idle("no board"), loop.onAutoFrame("AAA", 0))
+        assertTrue(loop.onAutoFrame("AAA", 0) is Loop.Outcome.Worked)
+        assertEquals(Loop.Outcome.Idle("no board"), loop.reportIdle("no board"))
         // The picture changed by a pixel (a ticking clock is enough), the next pass finds
         // nothing again: the banner must still come off.
-        loop.onAutoFrame("BBB", 3000)
+        assertTrue(loop.onAutoFrame("BBB", 3000) is Loop.Outcome.Worked)
         assertTrue("a banner must be tracked as outstanding", loop.busyAnnounced)
         assertEquals(
             "the repeated idle must be published, not suppressed",
