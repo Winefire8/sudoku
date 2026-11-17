@@ -247,7 +247,9 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         }
         handler.post {
             try {
-                process(bitmap)
+                // A tap is an explicit "read this screen": never let the cheap
+                // pre-check veto it, or a board it misjudges becomes unreadable.
+                process(bitmap, force = manual)
             } catch (t: Throwable) {
                 Log.e(TAG, "processing failed", t)
                 if (!bitmap.isRecycled) bitmap.recycle()
@@ -267,12 +269,12 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         }
     }
 
-    private fun process(bitmap: Bitmap) {
+    private fun process(bitmap: Bitmap, force: Boolean = false) {
         // Cheap pre-check *before* announcing anything: most screens (browser, chat,
         // launcher) have no board at all, and running the full detector on them every
         // couple of seconds is what made the assistant look like it scanned forever.
         // Doing it first also means a board-less screen never flashes a banner at all.
-        val looksLikeGrid = runCatching {
+        val looksLikeGrid = force || runCatching {
             val rgba = Mat()
             Utils.bitmapToMat(bitmap, rgba)
             val gray = Mat()
