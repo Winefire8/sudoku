@@ -268,7 +268,6 @@ object SudokuGridDetector {
         return score to GridGeometry(floatArrayOf(x0, y0, x1, y0, x1, y1, x0, y1))
     }
 
-
     // ------------------------------------------------------------------ stage B
 
     private fun contourCandidates(gray: org.opencv.core.Mat): List<GridGeometry> {
