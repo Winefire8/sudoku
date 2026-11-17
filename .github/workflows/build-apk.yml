@@ -40,7 +40,18 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest --stacktrace
+        run: |
+          set +e
+          ./gradlew --no-daemon testDebugUnitTest --stacktrace > /tmp/gradle.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            # Surface the tail of the log as an annotation: the raw job log lives in blob
+            # storage that the API client cannot reach, annotations can be read.
+            tail -c 3000 /tmp/gradle.log | while IFS= read -r line; do
+              echo "::error::$(printf '%s' "$line" | tr -d '\r' | cut -c1-900)"
+            done
+            exit $code
+          fi
 
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug --stacktrace
