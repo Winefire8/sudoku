@@ -25,7 +25,8 @@ class ScanLoopTest {
     private class Loop {
         var lastSignature: String? = null
         var lastIdleMessage: String? = null
-        var lastBusyAt = 0L
+        /** Timestamp of the last analysis; the service starts at "long ago", not at 0. */
+        var lastBusyAt = Long.MIN_VALUE / 4
         var passes = 0
 
         sealed class Outcome {
