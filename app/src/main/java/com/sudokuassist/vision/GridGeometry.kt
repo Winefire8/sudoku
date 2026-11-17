@@ -100,7 +100,13 @@ class GridGeometry(
     fun copy(): GridGeometry = GridGeometry(corners.copyOf())
 
     companion object {
-        /** Minimum ratio between opposite edges of a plausible board. */
+        /**
+         * Minimum ratio between opposite edges of a plausible board.
+         *
+         * 0.55 accepts a 45% keystone (far edge 55% of the near one), which covers a phone
+         * held at a steep angle, and still refuses a collapsed candidate like 400/1000.
+         * The test `GeometryTest.plausibilityRejectsDegenerateQuads` pins both ends.
+         */
         const val MIN_OPPOSITE_RATIO = 0.55f
 
         /**

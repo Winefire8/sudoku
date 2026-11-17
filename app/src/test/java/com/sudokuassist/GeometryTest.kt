@@ -76,13 +76,15 @@ class GeometryTest {
         assertFalse(square(0f, 0f, 40f).isPlausible())   // too small
         // Collapsed side: not a board at all.
         assertFalse(GridGeometry(floatArrayOf(0f, 0f, 900f, 0f, 10f, 500f, 0f, 900f)).isPlausible())
+        // Corners are tl, tr, br, bl — the far edge is the *top* one here, so a keystone
+        // shows up as top/bottom != 1.
         // Extreme keystone (far edge is 40% of the near one) is refused…
         assertFalse(
-            GridGeometry(floatArrayOf(400f, 100f, 700f, 1000f, 0f, 100f, 300f, 1000f)).isPlausible()
+            GridGeometry(floatArrayOf(300f, 100f, 700f, 100f, 1000f, 1000f, 0f, 1000f)).isPlausible()
         )
         // …but a 25% keystone, which is normal for a phone at an angle, is accepted.
         assertTrue(
-            GridGeometry(floatArrayOf(860f, 100f, 1000f, 1000f, 140f, 100f, 0f, 1000f)).isPlausible()
+            GridGeometry(floatArrayOf(125f, 100f, 875f, 100f, 1000f, 1000f, 0f, 1000f)).isPlausible()
         )
     }
 
