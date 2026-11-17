@@ -23,7 +23,6 @@
     <string name="step_overlay">3 · Launch</string>
     <string name="start_overlay">Show floating assistant</string>
     <string name="stop_overlay">Hide floating assistant</string>
-    <string name="open_capture_settings">Capture settings</string>
 
     <string name="step_settings">Overlay settings</string>
     <string name="auto_mode">Auto refresh on screen change</string>
@@ -48,7 +47,6 @@
     <string name="overlay_edit">Edit</string>
     <string name="overlay_solve">Solve</string>
     <string name="overlay_close">Close</string>
-    <string name="overlay_drag">Drag to move</string>
 
     <string name="notif_channel_overlay">Floating assistant</string>
     <string name="notif_channel_capture">Screen analysis</string>
@@ -56,7 +54,6 @@
     <string name="notif_overlay_text">Floating button is active</string>
     <string name="notif_capture_title">Analysing the screen</string>
     <string name="notif_capture_text">Local recognition is active</string>
-    <string name="notif_open">Open</string>
     <string name="notif_stop">Stop</string>
 
     <string name="error_overlay_permission">Grant the “draw over other apps” permission first</string>
@@ -66,15 +63,12 @@
     <string name="error_no_grid">No Sudoku grid found on the screen</string>
     <string name="error_unsolvable">The recognised digits contradict each other</string>
     <string name="error_no_solution">The puzzle has no solution</string>
-    <string name="error_edit_apply">Apply</string>
 
     <string name="editor_title">Edit digits — tap a cell, then a number</string>
     <string name="editor_apply">Apply</string>
     <string name="editor_cancel">Cancel</string>
     <string name="editor_clear">Clear</string>
 
-    <string name="dialog_capture_title">Screen capture consent</string>
-    <string name="dialog_capture_text">Android asks for confirmation every time screen analysis is started. Everything is processed on this device.</string>
 
     <string name="hint_usage">After starting: open any Sudoku app, tap the orange button, then “Read grid”. Answers appear on top of the cells. Use “Edit” if a digit was misread.</string>
 </resources>

@@ -70,6 +70,10 @@ class DigitOverlayView @JvmOverloads constructor(
         typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
     }
     private val path = Path()
+
+    /** Baseline offsets that centre the glyphs vertically on the cell centre. */
+    private var givenBaseline = 0f
+    private var answerBaseline = 0f
     private val rect = RectF()
 
     fun setState(s: State?) {
@@ -108,6 +112,12 @@ class DigitOverlayView @JvmOverloads constructor(
         outline.textSize = textSize
         outline.strokeWidth = (textSize * 0.14f).coerceAtLeast(2f)
         givenPaint.textSize = textSize * 0.42f
+        // Baselines that centre the glyph on the cell centre. Derived from the font metrics
+        // of the actual paint size instead of a magic fraction of textSize: the ascent and
+        // descent are asymmetric, so a fixed offset sits the digits too low at large
+        // scales and too high at small ones.
+        answerBaseline = -((fill.fontMetrics.ascent + fill.fontMetrics.descent) / 2f)
+        givenBaseline = -((givenPaint.fontMetrics.ascent + givenPaint.fontMetrics.descent) / 2f)
 
         for (i in 0 until 81) {
             val r = i / 9
@@ -117,7 +127,7 @@ class DigitOverlayView @JvmOverloads constructor(
             val p = geometry.cellCenter(r, c)
             val x = p[0] * sx
             val y = p[1] * sy
-            val baseline = y + textSize * 0.36f
+            val baseline = y + answerBaseline
 
             if (i == s.highlightIndex) {
                 val q = geometry.cellQuad(r, c)
@@ -133,7 +143,7 @@ class DigitOverlayView @JvmOverloads constructor(
             if (given != 0) {
                 if (s.showGivens) {
                     givenPaint.color = Color.argb(150, 255, 106, 61)
-                    canvas.drawText(given.toString(), x, y - textSize * 0.42f + textSize * 0.36f, givenPaint)
+                    canvas.drawText(given.toString(), x, y + givenBaseline, givenPaint)
                 }
                 continue
             }

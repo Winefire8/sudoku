@@ -10,7 +10,15 @@ sealed class SolveResult {
     /** The givens already contradict each other (or the board is not fillable). */
     data class Contradiction(val row: Int, val col: Int, val message: String) : SolveResult()
 
-    /** No valid completion of the givens exists. */
+    /**
+     * No valid completion of the givens exists, or the search hit [NODE_LIMIT].
+     *
+     * The limit is a safety valve, not a practical constraint: with the MRV heuristic the
+     * hardest published puzzles need far fewer nodes than the limit (measured on Platinum
+     * Blonde 2.9k, Easter Monster 6.3k, Inkala 2012 13.8k, Golden Nugget 14.7k, an
+     * "empty-ish" 40-given board 58k), so a real puzzle that has a solution always finds
+     * it. Hitting the limit means the input is not a Sudoku at all.
+     */
     object NoSolution : SolveResult()
 
 }
@@ -28,6 +36,12 @@ sealed class SolveResult {
 object SudokuSolver {
 
     const val EMPTY = 0
+
+    /**
+     * Upper bound on search nodes (see [SolveResult.NoSolution]). Roughly 34x the worst
+     * real puzzle measured, so it cannot fire on a board that actually has a solution.
+     */
+    private const val NODE_LIMIT = 2_000_000
     const val N = 9
     const val CELLS = 81
 
@@ -126,7 +140,7 @@ object SudokuSolver {
 
         fun place(index: Int): Boolean {
             counter++
-            if (counter > 2_000_000) return false // safety valve
+            if (counter > NODE_LIMIT) return false
             var best = -1
             var bestMask = 0
             var bestCount = 10

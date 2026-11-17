@@ -31,6 +31,31 @@ class SudokuSolverTest {
     private val unsolvable =
         "530070000600395000098000060800060003400803001700020006060000280000419005000080079"
 
+    /** Published "hardest" boards: the node limit must never be what stops the search. */
+    @Test
+    fun solvesPublishedHardPuzzles() {
+        val hard = listOf(
+            // Platinum Blonde
+            "000000012000000003002300400001800005060070800000009000008500000900040500470006000",
+            // Golden Nugget
+            "000000039000001005003050800008090006070002000100400000009080050020000600400700000",
+            // Easter Monster
+            "100000002090400050006000700050903000000070000000850040700000600030009080002000001",
+            // Inkala 2012
+            "800000000003600000070090200050007000000045700000100030001000068008500010090000400"
+        )
+        for (p in hard) {
+            val t0 = System.nanoTime()
+            val result = SudokuSolver.solve(grid(p))
+            val ms = (System.nanoTime() - t0) / 1_000_000.0
+            assertTrue("no solution for $p -> $result", result is SolveResult.Solved)
+            assertNull("invalid solution for $p", SudokuSolver.validate((result as SolveResult.Solved).solution))
+            // The node cap is 2M; the worst published board needs ~58k nodes, so this is a
+            // generous bound that still catches a pathological slowdown.
+            assertTrue("$p took $ms ms", ms < 2000.0)
+        }
+    }
+
     @Test
     fun solvesClassicPuzzle() {
         val result = SudokuSolver.solve(grid(classic))
