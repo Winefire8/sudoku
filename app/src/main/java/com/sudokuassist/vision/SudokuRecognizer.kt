@@ -38,6 +38,18 @@ class SudokuRecognizer(
     private companion object {
         /** OCR runs on the warped board scaled up by this factor. */
         const val OCR_ZOOM = 2
+
+        /**
+         * Inset of the recognised cell, as a fraction of the cell size, used by **both**
+         * the occupancy mask and the glyph crop.
+         *
+         * 0.10 is measured (`tools/verify_pipeline.py`): 0.10 gives 30/30 digits on the
+         * bundled sample while 0.22 clips the glyph (11/30). Keeping one constant means the
+         * cell the occupancy pass says is filled is exactly the cell the classifier reads —
+         * the two used to differ (0.10 vs 0.12), which is harmless today but would silently
+         * desynchronise as soon as either is re-tuned.
+         */
+        const val CELL_INSET = 0.10
     }
 
     /**
@@ -167,7 +179,7 @@ class SudokuRecognizer(
     private fun readOccupancy(warped: Mat): BooleanArray {
         val out = BooleanArray(81)
         val cell = warped.cols() / 9
-        val margin = (cell * 0.10).roundToInt()
+        val margin = (cell * CELL_INSET).roundToInt()
         val inner = Mat()
         for (r in 0 until 9) {
             for (c in 0 until 9) {
@@ -274,7 +286,7 @@ class SudokuRecognizer(
     private fun cropCell(board: Bitmap, index: Int, cell: Int): Bitmap? {
         val r = index / 9
         val c = index % 9
-        val m = (cell * 0.12).roundToInt()
+        val m = (cell * CELL_INSET).roundToInt()
         val x = c * cell + m
         val y = r * cell + m
         val w = cell - 2 * m
