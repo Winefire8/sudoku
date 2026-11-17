@@ -46,10 +46,12 @@ jobs:
           code=$?
           if [ $code -ne 0 ]; then
             tr -d '\r' < /tmp/gradle.log > /tmp/g.log
-            echo "::error::=== marker: errors ==="
-            grep -nE "^e: |error:|What went wrong|Execution failed|Caused by" /tmp/g.log | head -30 | while IFS= read -r l; do echo "::error::$l"; done
-            echo "::error::=== marker: context ==="
-            grep -n -A6 "What went wrong" /tmp/g.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::=== marker: failing tests ==="
+            grep -nE "^e: |FAILED|failed|AssertionError|expected:|What went wrong" /tmp/g.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::=== marker: xml reports ==="
+            find app/build/test-results -name "*.xml" 2>/dev/null | head -5 | while IFS= read -r f; do
+              grep -oE '<testcase name="[^"]*"|<failure[^>]*message="[^"]{0,300}"' "$f" | head -20 | while IFS= read -r l; do echo "::error::$l"; done
+            done
             exit $code
           fi
 
