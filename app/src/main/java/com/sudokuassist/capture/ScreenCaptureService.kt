@@ -22,11 +22,7 @@ import com.sudokuassist.util.AppEvents
 import com.sudokuassist.util.Notifications
 import com.sudokuassist.util.Prefs
 import com.sudokuassist.vision.RecognizedGrid
-import com.sudokuassist.vision.SudokuGridDetector
 import com.sudokuassist.vision.SudokuRecognizer
-import org.opencv.android.Utils
-import org.opencv.core.Mat
-import org.opencv.imgproc.Imgproc
 
 /**
  * Foreground service that owns the MediaProjection session.
@@ -247,9 +243,7 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         }
         handler.post {
             try {
-                // A tap is an explicit "read this screen": never let the cheap
-                // pre-check veto it, or a board it misjudges becomes unreadable.
-                process(bitmap, force = manual)
+                process(bitmap)
             } catch (t: Throwable) {
                 Log.e(TAG, "processing failed", t)
                 if (!bitmap.isRecycled) bitmap.recycle()
@@ -269,30 +263,13 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
         }
     }
 
-    private fun process(bitmap: Bitmap, force: Boolean = false) {
-        // Cheap pre-check *before* announcing anything: most screens (browser, chat,
-        // launcher) have no board at all, and running the full detector on them every
-        // couple of seconds is what made the assistant look like it scanned forever.
-        // Doing it first also means a board-less screen never flashes a banner at all.
-        val looksLikeGrid = force || runCatching {
-            val rgba = Mat()
-            Utils.bitmapToMat(bitmap, rgba)
-            val gray = Mat()
-            Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
-            rgba.release()
-            val ok = SudokuGridDetector.hasGridLikeStructure(gray)
-            gray.release()
-            ok
-        }.getOrDefault(true)   // on any doubt, fall through to the real detector
-
-        if (!looksLikeGrid) {
-            bitmap.recycle()
-            reportIdle(getString(R.string.status_no_grid_here))
-            return
-        }
-
+    private fun process(bitmap: Bitmap) {
+        // Announce only now: this is the part that can take a moment. [onFrame] has already
+        // discarded unchanged screens, and every path below publishes a terminal update, so
+        // the banner lives exactly as long as this call does.
         AppEvents.publish(AppEvents.Update.Working(getString(R.string.status_reading)))
         busyAnnounced = true
+
         val output = try {
             // The ML Kit toggle can change between runs: rebuild the recogniser when it does.
             val useMlKit = prefs.useMlKit
@@ -308,8 +285,10 @@ class ScreenCaptureService : Service(), ScreenCaptureManager.Listener {
             null
         }
         if (output == null) {
+            // Not an error: most screenfuls simply have no board on them. A toast for every
+            // browser tab would be noise, so this is reported as a quiet idle state.
             bitmap.recycle()
-            publishFailure(AppEvents.Reason.NO_GRID, getString(R.string.error_no_grid), null)
+            reportIdle(getString(R.string.status_no_grid_here))
             return
         }
         val grid: RecognizedGrid = output.grid

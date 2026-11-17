@@ -13,9 +13,9 @@ import org.junit.Test
  * The overlay therefore showed that banner forever on any screen with no board in it.
  *
  * The rules, in order of importance:
- *  1. the "busy" announcement is only made once a board-like screen has been confirmed, and
- *     every terminated pass retires it — an idle that repeats the previous message still
- *     publishes when a banner is outstanding;
+ *  1. the "busy" announcement brackets the work exactly: every pass publishes a terminal
+ *     update, and an idle that repeats the previous message still publishes when a banner
+ *     is outstanding;
  *  2. an unchanged picture does not start a pass at all;
  *  3. a screen already described as "no board here" is not re-described (no banner flicker);
  *  4. a manual tap always runs, even on an unchanged picture.
@@ -38,14 +38,9 @@ class ScanLoopTest {
             data class Idle(val message: String?) : Outcome()
         }
 
-        /**
-         * @param boardLike whether the cheap pre-check thinks there is a board here. Only a
-         *   board-like screen announces "Reading the screen…"; everything else is idle.
-         */
         fun onAutoFrame(
             sig: String,
             now: Long,
-            boardLike: Boolean = true,
             minIntervalMs: Long = 2500,
         ): Outcome {
             if (sig == lastSignature) return Outcome.Skipped
@@ -53,15 +48,13 @@ class ScanLoopTest {
             if (now - lastBusyAt < minIntervalMs) return Outcome.Skipped
             lastBusyAt = now
             passes++
-            if (!boardLike) return reportIdle("no board")
             busyAnnounced = true
             return Outcome.Worked(announcesBusy = true)
         }
 
-        fun onManualFrame(now: Long, boardLike: Boolean = true): Outcome {
+        fun onManualFrame(now: Long): Outcome {
             lastBusyAt = now
             passes++
-            if (!boardLike) return reportIdle("no board")
             busyAnnounced = true
             return Outcome.Worked(announcesBusy = true)
         }
@@ -102,9 +95,13 @@ class ScanLoopTest {
         val loop = Loop()
         loop.onAutoFrame("AAA", 0)
         assertEquals(Loop.Outcome.Idle("no board"), loop.reportIdle("no board"))
-        // Re-entering the same state (a re-check of a board-less screen) stays silent.
-        loop.onAutoFrame("BBB", 3000, boardLike = false)
+        // Re-entering the same state (a re-check of a board-less screen) stays silent once
+        // nothing is left on screen — that is what stops the banner flickering.
+        loop.finish()
         assertEquals(Loop.Outcome.Idle(null), loop.reportIdle("no board"))
+        // ...but a fresh pass that finds the same nothing still has its own banner to clear.
+        loop.onAutoFrame("BBB", 3000)
+        assertEquals(Loop.Outcome.Idle("no board"), loop.reportIdle("no board"))
     }
 
     @Test
@@ -138,11 +135,10 @@ class ScanLoopTest {
     @Test
     fun repeatedIdleStillClearsAnOutstandingBanner() {
         val loop = Loop()
-        // A board-less screen: the pre-check runs first, so no banner is ever announced.
-        assertEquals(Loop.Outcome.Idle("no board"), loop.onAutoFrame("AAA", 0, boardLike = false))
-        // The picture changes slightly, the pre-check disagrees... and now it looks board-like?
-        // Worst case: a banner goes up and the very next pass finds nothing again.
-        loop.onAutoFrame("BBB", 3000, boardLike = true)
+        assertEquals(Loop.Outcome.Idle("no board"), loop.onAutoFrame("AAA", 0))
+        // The picture changed by a pixel (a ticking clock is enough), the next pass finds
+        // nothing again: the banner must still come off.
+        loop.onAutoFrame("BBB", 3000)
         assertTrue("a banner must be tracked as outstanding", loop.busyAnnounced)
         assertEquals(
             "the repeated idle must be published, not suppressed",
@@ -154,14 +150,22 @@ class ScanLoopTest {
         assertEquals(Loop.Outcome.Idle(null), loop.reportIdle("no board"))
     }
 
+    /**
+     * A board-less screen that changes every tick (status-bar clock, cursor, a chat
+     * scrolling): each pass announces busy and each must take the banner down again, so
+     * nothing is ever left on screen once the dust settles.
+     */
     @Test
-    fun boardlessScreenNeverAnnouncesBusy() {
+    fun everyPassOnAChangingBoardlessScreenSettles() {
         val loop = Loop()
         for (t in 0..5) {
-            // Every tick brings a new picture (clock in the status bar) and no board.
-            val outcome = loop.onAutoFrame("sig$t", t * 3000L, boardLike = false)
-            assertTrue("tick $t published an idle, not a banner", outcome is Loop.Outcome.Idle)
-            assertFalse("tick $t must not announce busy", loop.busyAnnounced)
+            assertTrue(loop.onAutoFrame("sig$t", t * 3000L) is Loop.Outcome.Worked)
+            assertEquals(
+                "tick $t must publish the idle, not swallow it",
+                Loop.Outcome.Idle("no board"),
+                loop.reportIdle("no board")
+            )
+            assertFalse("tick $t left the banner up", loop.busyAnnounced)
         }
     }
 
