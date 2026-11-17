@@ -301,13 +301,13 @@ object SudokuGridDetector {
             for (c in contours) {
                 val a = org.opencv.imgproc.Imgproc.contourArea(c)
                 if (a < 0.01 * area || a > 0.97 * area) continue
-                val peri = org.opencv.imgproc.Imgproc.arcLength(c, true)
+                // arcLength/approxPolyDP work on the float variant, not on MatOfPoint.
+                val curve = org.opencv.core.MatOfPoint2f(*c.toArray())
+                val peri = org.opencv.imgproc.Imgproc.arcLength(curve, true)
                 var quad: FloatArray? = null
                 for (eps in doubleArrayOf(0.01, 0.02, 0.03, 0.05, 0.08)) {
                     val approx = org.opencv.core.MatOfPoint2f()
-                    org.opencv.imgproc.Imgproc.approxPolyDP(
-                        org.opencv.core.MatOfPoint2f(*c.toArray()), approx, eps * peri, true
-                    )
+                    org.opencv.imgproc.Imgproc.approxPolyDP(curve, approx, eps * peri, true)
                     if (approx.total().toInt() == 4 && org.opencv.imgproc.Imgproc.isContourConvex(
                             org.opencv.core.MatOfPoint(*approx.toArray())
                         )
@@ -324,6 +324,7 @@ object SudokuGridDetector {
                         quad = orderQuad(boxPoints(rect))
                     }
                 }
+                curve.release()
                 if (quad != null) {
                     val scaled = FloatArray(8) { (quad[it] / scale).toFloat() }
                     quads.add(scaled to 0f)
@@ -536,7 +537,7 @@ object SudokuGridDetector {
 
     /** Fraction of set pixels per column ([alongRows] = false) or per row (true). */
     private fun columnMeans(m: org.opencv.core.Mat, alongRows: Boolean = false): FloatArray {
-        if (m.empty || m.rows() == 0 || m.cols() == 0) return FloatArray(0)
+        if (m.empty() || m.rows() == 0 || m.cols() == 0) return FloatArray(0)
         val sums = org.opencv.core.Mat()
         org.opencv.core.Core.reduce(
             m, sums,
